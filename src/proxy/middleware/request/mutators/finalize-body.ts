@@ -14,10 +14,9 @@ export const finalizeBody: ProxyReqMutator = (manager) => {
       delete req.body.prompt;
     }
 
-    // TODO: This might not be necessary anymore due to http-proxy monkey patch
-    const updatedBody = JSON.stringify(req.body);
-    manager.setHeader("Content-Length", String(Buffer.byteLength(updatedBody)));
-    manager.setBody(Buffer.from(updatedBody));
-    (req as any).rawBody = Buffer.from(updatedBody);
+    const serialized =
+      typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+    manager.setHeader("Content-Length", String(Buffer.byteLength(serialized)));
+    manager.setBody(serialized);
   }
 };

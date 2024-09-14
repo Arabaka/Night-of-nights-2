@@ -90,8 +90,12 @@ export function createQueuedProxyMiddleware({
     buffer: ((req: Request) => {
       // This is a hack/monkey patch and is not part of the official
       // http-proxy-middleware package. See patches/http-proxy+1.18.1.patch.
+      let payload = req.body;
+      if (typeof payload === "string") {
+        payload = Buffer.from(payload);
+      }
       const stream = new Readable();
-      stream.push(req.body);
+      stream.push(payload);
       stream.push(null);
       return stream;
     }) as any,

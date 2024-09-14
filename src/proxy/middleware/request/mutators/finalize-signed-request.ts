@@ -23,8 +23,10 @@ export const finalizeSignedRequest: ProxyReqMutator = (manager) => {
   Object.entries(req.signedRequest.headers).forEach(([key, value]) => {
     manager.setHeader(key, value);
   });
-
-  // Don't use fixRequestBody here because it adds a content-length header.
-  // Amazon doesn't want that and it breaks the signature.
-  manager.setBody(req.signedRequest.body);
+  const serialized =
+    typeof req.signedRequest.body === "string"
+      ? req.signedRequest.body
+      : JSON.stringify(req.signedRequest.body);
+  manager.setHeader("Content-Length", String(Buffer.byteLength(serialized)));
+  manager.setBody(serialized);
 };
