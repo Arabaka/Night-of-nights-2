@@ -10,7 +10,10 @@
 import admin from "firebase-admin";
 import schedule from "node-schedule";
 import { v4 as uuid } from "uuid";
-import { config, getFirebaseApp } from "../../config";
+import { config } from "../../config";
+import { logger } from "../../logger";
+import { getFirebaseApp } from "../firebase";
+import { APIFormat } from "../key-management";
 import {
   getAwsBedrockModelFamily,
   getGcpModelFamily,
@@ -22,10 +25,8 @@ import {
   MODEL_FAMILIES,
   ModelFamily,
 } from "../models";
-import { logger } from "../../logger";
-import { User, UserTokenCounts, UserUpdate } from "./schema";
-import { APIFormat } from "../key-management";
 import { assertNever } from "../utils";
+import { User, UserTokenCounts, UserUpdate } from "./schema";
 
 const log = logger.child({ module: "users" });
 

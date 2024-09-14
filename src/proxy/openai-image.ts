@@ -17,6 +17,7 @@ import {
 } from "./middleware/response";
 import { generateModelList } from "./openai";
 import { OpenAIImageGenerationResult } from "../shared/file-storage/mirror-generated-image";
+import { getHttpAgents } from "../shared/network";
 
 const KNOWN_MODELS = ["dall-e-2", "dall-e-3"];
 
@@ -99,6 +100,7 @@ function transformResponseForChat(
 const openaiImagesProxy = createQueueMiddleware({
   proxyMiddleware: createProxyMiddleware({
     target: "https://api.openai.com",
+    agent: getHttpAgents()[0],
     changeOrigin: true,
     selfHandleResponse: true,
     logger,

@@ -17,6 +17,7 @@ import {
   createOnProxyResHandler,
 } from "./middleware/response";
 import { sendErrorToClient } from "./middleware/response/error-generator";
+import { getHttpAgents } from "../shared/network";
 
 let modelsCache: any = null;
 let modelsCacheTime = 0;
@@ -204,6 +205,7 @@ function setAnthropicBetaHeader(req: Request) {
 const anthropicProxy = createQueueMiddleware({
   proxyMiddleware: createProxyMiddleware({
     target: "https://api.anthropic.com",
+    agent: getHttpAgents()[0],
     changeOrigin: true,
     selfHandleResponse: true,
     logger,

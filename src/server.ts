@@ -23,6 +23,7 @@ import { init as initTokenizers } from "./shared/tokenization";
 import { checkOrigin } from "./proxy/check-origin";
 import { sendErrorToClient } from "./proxy/middleware/response/error-generator";
 import { initializeDatabase, getDatabase } from "./shared/database";
+import { initializeFirebase } from "./shared/firebase";
 
 const PORT = config.port;
 const BIND_ADDRESS = config.bindAddress;
@@ -137,6 +138,12 @@ async function start() {
   logger.info("Checking configs and external dependencies...");
   await assertConfigIsValid();
 
+  if (config.gatekeeperStore.startsWith("firebase")) {
+    logger.info("Testing Firebase connection...");
+    await initializeFirebase();
+    logger.info("Firebase connection successful.");
+  }
+
   keyPool.init();
 
   await initTokenizers();
@@ -166,7 +173,7 @@ async function start() {
   app.listen(PORT, BIND_ADDRESS, () => {
     logger.info(
       { port: PORT, interface: BIND_ADDRESS },
-      "Now listening for connections."
+      "Server ready to accept connections."
     );
     registerUncaughtExceptionHandler();
   });

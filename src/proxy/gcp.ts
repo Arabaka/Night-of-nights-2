@@ -16,6 +16,7 @@ import {
   createOnProxyResHandler,
 } from "./middleware/response";
 import { transformAnthropicChatResponseToOpenAI } from "./anthropic";
+import { getHttpAgents } from "../shared/network";
 const LATEST_GCP_SONNET_MINOR_VERSION = "20240229";
 
 let modelsCache: any = null;
@@ -82,6 +83,7 @@ const gcpProxy = createQueueMiddleware({
   beforeProxy: signGcpRequest,
   proxyMiddleware: createProxyMiddleware({
     target: "bad-target-will-be-rewritten",
+    agent: getHttpAgents()[0],
     router: ({ signedRequest }) => {
       if (!signedRequest) throw new Error("Must sign request before proxying");
       return `${signedRequest.protocol}//${signedRequest.hostname}`;

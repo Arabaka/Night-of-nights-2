@@ -394,14 +394,26 @@ type Config = {
    * settings. This is useful if you wish to route users' requests through
    * another proxy or VPN, or if you have multiple network interfaces and want
    * to use a specific one for outgoing requests.
-   *
-   * The following keys are supported:
-   * - interface: The name of the network interface to use.
-   * - socks5Url: The URL of a SOCKS5 proxy to use.
    */
   httpAgent?: {
+    /**
+     * The name of the network interface to use. The first external IPv4 address
+     * belonging to this interface will be used for outgoing requests.
+     */
     interface?: string;
-    socks5Url?: string;
+    /**
+     * The URL of a proxy server to use. Supports SOCKS4, SOCKS5, HTTP, and
+     * HTTPS. If not set, the proxy will be made using the default agent.
+     * - SOCKS4: `socks4://some-socks-proxy.com:9050`
+     * - SOCKS5: `socks5://username:password@some-socks-proxy.com:9050`
+     * - HTTP: `http://proxy-server-over-tcp.com:3128`
+     * - HTTPS: `https://proxy-server-over-tls.com:3129`
+     *
+     * **Note:** If your proxy server issues a certificate, you may need to set
+     * `NODE_EXTRA_CA_CERTS` to the path to your certificate, otherwise this
+     * application will reject TLS connections.
+     */
+    proxyUrl?: string;
   };
 };
 
@@ -511,7 +523,7 @@ export const config: Config = {
   tokensPunishmentFactor: getEnvWithDefault("TOKENS_PUNISHMENT_FACTOR", 0.0),
   httpAgent: {
     interface: getEnvWithDefault("HTTP_AGENT_INTERFACE", undefined),
-    socks5Url: getEnvWithDefault("HTTP_AGENT_SOCKS5_URL", undefined),
+    proxyUrl: getEnvWithDefault("HTTP_AGENT_PROXY_URL", undefined),
   },
 } as const;
 
@@ -634,7 +646,15 @@ export async function assertConfigIsValid() {
 
   if (Object.values(config.httpAgent || {}).filter(Boolean).length === 0) {
     delete config.httpAgent;
+  } else if (config.httpAgent) {
+    if (config.httpAgent.interface && config.httpAgent.proxyUrl) {
+      throw new Error(
+        "Cannot set both `HTTP_AGENT_INTERFACE` and `HTTP_AGENT_PROXY_URL`."
+      );
+    }
   }
+
+  startupLogger.info("Configs checked.");
 
   // Ensure forks which add new secret-like config keys don't unwittingly expose
   // them to users.
@@ -649,8 +669,6 @@ export async function assertConfigIsValid() {
         `Config key "${key}" may be sensitive but is exposed. Add it to SENSITIVE_KEYS or OMITTED_KEYS.`
       );
   }
-
-  await maybeInitializeFirebase();
 }
 
 /**
@@ -782,32 +800,6 @@ function getEnvWithDefault<T>(env: string | string[], defaultValue: T): T {
   } catch (err) {
     return value as unknown as T;
   }
-}
-
-let firebaseApp: firebase.app.App | undefined;
-
-async function maybeInitializeFirebase() {
-  if (!config.gatekeeperStore.startsWith("firebase")) {
-    return;
-  }
-
-  const firebase = await import("firebase-admin");
-  const firebaseKey = Buffer.from(config.firebaseKey!, "base64").toString();
-  const app = firebase.initializeApp({
-    credential: firebase.credential.cert(JSON.parse(firebaseKey)),
-    databaseURL: config.firebaseRtdbUrl,
-  });
-
-  await app.database().ref("connection-test").set(Date.now());
-
-  firebaseApp = app;
-}
-
-export function getFirebaseApp(): firebase.app.App {
-  if (!firebaseApp) {
-    throw new Error("Firebase app not initialized.");
-  }
-  return firebaseApp;
 }
 
 function parseCsv(val: string): string[] {

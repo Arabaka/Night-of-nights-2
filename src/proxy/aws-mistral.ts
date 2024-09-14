@@ -16,6 +16,7 @@ import { handleProxyError } from "./middleware/common";
 import { Router } from "express";
 import { ipLimiter } from "./rate-limit";
 import { detectMistralInputApi, transformMistralTextToMistralChat } from "./mistral-ai";
+import { getHttpAgents } from "../shared/network";
 
 const awsMistralBlockingResponseHandler: ProxyResHandlerWithBody = async (
   _proxyRes,
@@ -43,6 +44,7 @@ const awsMistralProxy = createQueueMiddleware({
   beforeProxy: signAwsRequest,
   proxyMiddleware: createProxyMiddleware({
     target: "bad-target-will-be-rewritten",
+    agent: getHttpAgents()[0],
     router: ({ signedRequest }) => {
       if (!signedRequest) throw new Error("Must sign request before proxying");
       return `${signedRequest.protocol}//${signedRequest.hostname}`;

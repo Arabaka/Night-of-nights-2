@@ -16,6 +16,7 @@ import {
   createOnProxyResHandler,
   ProxyResHandlerWithBody,
 } from "./middleware/response";
+import { getHttpAgents } from "../shared/network";
 
 let modelsCache: any = null;
 let modelsCacheTime = 0;
@@ -51,6 +52,7 @@ const azureOpenAIProxy = createQueueMiddleware({
   beforeProxy: addAzureKey,
   proxyMiddleware: createProxyMiddleware({
     target: "will be set by router",
+    agent: getHttpAgents()[0],
     router: (req) => {
       if (!req.signedRequest) throw new Error("signedRequest not set");
       const { hostname, path } = req.signedRequest;

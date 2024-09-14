@@ -17,6 +17,7 @@ import {
 } from "./middleware/response";
 import { addGoogleAIKey } from "./middleware/request/preprocessors/add-google-ai-key";
 import { GoogleAIKey, keyPool } from "../shared/key-management";
+import { getHttpAgents } from "../shared/network";
 
 let modelsCache: any = null;
 let modelsCacheTime = 0;
@@ -114,6 +115,7 @@ const googleAIProxy = createQueueMiddleware({
   beforeProxy: addGoogleAIKey,
   proxyMiddleware: createProxyMiddleware({
     target: "bad-target-will-be-rewritten",
+    agent: getHttpAgents()[0],
     router: ({ signedRequest }) => {
       const { protocol, hostname, path } = signedRequest;
       return `${protocol}//${hostname}${path}`;

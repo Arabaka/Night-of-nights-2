@@ -1,11 +1,13 @@
-import axios from "axios";
 import express from "express";
 import { promises as fs } from "fs";
 import path from "path";
 import { v4 } from "uuid";
 import { USER_ASSETS_DIR } from "../../config";
+import { getAxiosInstance } from "../network";
 import { addToImageHistory } from "./image-history";
 import { libSharp } from "./index";
+
+const axios = getAxiosInstance();
 
 export type OpenAIImageGenerationResult = {
   created: number;

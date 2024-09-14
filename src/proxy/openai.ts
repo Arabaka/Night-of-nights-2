@@ -21,6 +21,7 @@ import {
   createOnProxyResHandler,
   ProxyResHandlerWithBody,
 } from "./middleware/response";
+import { getHttpAgents } from "../shared/network";
 
 // https://platform.openai.com/docs/models/overview
 let modelsCache: any = null;
@@ -147,6 +148,7 @@ function transformTurboInstructResponse(
 const openaiProxy = createQueueMiddleware({
   proxyMiddleware: createProxyMiddleware({
     target: "https://api.openai.com",
+    agent: getHttpAgents()[0],
     changeOrigin: true,
     selfHandleResponse: true,
     logger,
@@ -160,6 +162,7 @@ const openaiProxy = createQueueMiddleware({
 
 const openaiEmbeddingsProxy = createProxyMiddleware({
   target: "https://api.openai.com",
+  agent: getHttpAgents()[0],
   changeOrigin: true,
   selfHandleResponse: false,
   logger,
