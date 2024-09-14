@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
-import { Readable } from "stream";
+import http from "http";
 import ProxyServer from "http-proxy";
+import { Readable } from "stream";
 import {
   createProxyMiddleware,
   Options,
@@ -8,12 +9,10 @@ import {
   proxyEventsPlugin,
 } from "http-proxy-middleware";
 import { ProxyReqMutator, RequestPreprocessor } from "./index";
-import { logger } from "../../../logger";
-import { handleProxyError } from "../common";
 import { createOnProxyResHandler, ProxyResHandlerWithBody } from "../response";
 import { createQueueMiddleware } from "../../queue";
 import { getHttpAgents } from "../../../shared/network";
-import { Logger } from "pino";
+import { classifyErrorAndSend } from "../common";
 
 /**
  * Options for the `createQueuedProxyMiddleware` factory function.
@@ -56,14 +55,13 @@ export function createQueuedProxyMiddleware({
   beforeProxy,
   blockingResponseHandler,
 }: ProxyMiddlewareFactoryOptions) {
-  const hpmTarget = typeof target === "string" ? target : "set by router";
+  const hpmTarget = typeof target === "string" ? target : "https://setbyrouter";
   const hpmRouter = typeof target === "function" ? target : undefined;
 
-  const agent = hpmTarget.startsWith("http:")
-    ? getHttpAgents()[0]
-    : getHttpAgents()[1];
+  const [httpAgent, httpsAgent] = getHttpAgents();
+  const agent = hpmTarget.startsWith("http:") ? httpAgent : httpsAgent;
 
-  const proxyMiddleware = createProxyMiddleware({
+  const proxyMiddleware = createProxyMiddleware<Request, Response>({
     target: hpmTarget,
     router: hpmRouter,
     agent,
@@ -87,7 +85,7 @@ export function createQueuedProxyMiddleware({
       proxyRes: createOnProxyResHandler(
         blockingResponseHandler ? [blockingResponseHandler] : []
       ),
-      error: handleProxyError,
+      error: classifyErrorAndSend,
     },
     buffer: ((req: Request) => {
       // This is a hack/monkey patch and is not part of the official
@@ -102,6 +100,7 @@ export function createQueuedProxyMiddleware({
   return createQueueMiddleware({ beforeProxy, mutators, proxyMiddleware });
 }
 
+type ProxiedResponse = http.IncomingMessage & Response & any;
 function pinoLoggerPlugin(proxyServer: ProxyServer<Request>) {
   proxyServer.on("error", (err, req, res, target) => {
     const originalUrl = req.originalUrl;
@@ -113,21 +112,21 @@ function pinoLoggerPlugin(proxyServer: ProxyServer<Request>) {
   });
   proxyServer.on("proxyReq", (proxyReq, req, res) => {
     const originalUrl = req.originalUrl;
-    const targetUrl = res.req.url;
-    const target = `${proxyReq.protocol}://${proxyReq.host}`;
+    const targetHost = `${proxyReq.protocol}//${proxyReq.host}`;
+    const targetPath = res.req.url;
     req.log.info(
-      { originalUrl, targetUrl, target },
-      "Sending upstream request..."
+      { originalUrl, targetHost, targetPath },
+      "Sending request to upstream API..."
     );
   });
-  proxyServer.on("proxyRes", (proxyRes, req, res) => {
+  proxyServer.on("proxyRes", (proxyRes: ProxiedResponse, req, _res) => {
     const originalUrl = req.originalUrl;
-    const targetUrl = res.req.url;
+    const targetHost = `${proxyRes.req.protocol}//${proxyRes.req.hostname}`;
+    const targetPath = proxyRes.req.path;
     const statusCode = proxyRes.statusCode;
-    const host = res.req.headers["host"];
     req.log.info(
-      { originalUrl, targetUrl, statusCode, host },
-      "Got upstream response."
+      { originalUrl, targetHost, targetPath, statusCode },
+      "Got response from upstream API."
     );
   });
 }

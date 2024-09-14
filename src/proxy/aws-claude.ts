@@ -13,8 +13,7 @@ import {
 import { ProxyResHandlerWithBody } from "./middleware/response";
 import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 
-/** Only used for non-streaming requests. */
-const awsResponseHandler: ProxyResHandlerWithBody = async (
+const awsBlockingResponseHandler: ProxyResHandlerWithBody = async (
   _proxyRes,
   req,
   res,
@@ -48,12 +47,6 @@ const awsResponseHandler: ProxyResHandlerWithBody = async (
   res.status(200).json({ ...newBody, proxy: body.proxy });
 };
 
-/**
- * Transforms a model response from the Anthropic API to match those from the
- * OpenAI API, for users using Claude via the OpenAI-compatible endpoint. This
- * is only used for non-streaming requests as streaming requests are handled
- * on-the-fly.
- */
 function transformAwsTextResponseToOpenAI(
   awsBody: Record<string, any>,
   req: Request
@@ -89,7 +82,7 @@ const awsClaudeProxy = createQueuedProxyMiddleware({
   },
   beforeProxy: [signAwsRequest],
   mutators: [finalizeSignedRequest],
-  blockingResponseHandler: awsResponseHandler,
+  blockingResponseHandler: awsBlockingResponseHandler,
 });
 
 const nativeTextPreprocessor = createPreprocessorMiddleware(

@@ -61,7 +61,6 @@ const handleModelRequest: RequestHandler = (_req, res) => {
   res.status(200).json(getModelsResponse());
 };
 
-/** Only used for non-streaming requests. */
 const anthropicBlockingResponseHandler: ProxyResHandlerWithBody = async (
   _proxyRes,
   req,
@@ -115,13 +114,7 @@ export function transformAnthropicChatResponseToAnthropicText(
   };
 }
 
-/**
- * Transforms a model response from the Anthropic API to match those from the
- * OpenAI API, for users using Claude via the OpenAI-compatible endpoint. This
- * is only used for non-streaming requests as streaming requests are handled
- * on-the-fly.
- */
-export function transformAnthropicTextResponseToOpenAI(
+function transformAnthropicTextResponseToOpenAI(
   anthropicBody: Record<string, any>,
   req: Request
 ): Record<string, any> {

@@ -9,7 +9,6 @@ import {
   createEmbeddingsPreprocessorMiddleware,
   createPreprocessorMiddleware,
   finalizeBody,
-  forceModel,
   RequestPreprocessor,
 } from "./middleware/request";
 import { ProxyResHandlerWithBody } from "./middleware/response";
@@ -119,7 +118,6 @@ const openaiResponseHandler: ProxyResHandlerWithBody = async (
   res.status(200).json({ ...newBody, proxy: body.proxy });
 };
 
-/** Only used for non-streaming responses. */
 function transformTurboInstructResponse(
   turboInstructBody: Record<string, any>
 ): Record<string, any> {
@@ -191,6 +189,10 @@ openaiRouter.post(
   createEmbeddingsPreprocessorMiddleware(),
   openaiEmbeddingsProxy
 );
+
+function forceModel(model: string): RequestPreprocessor {
+  return (req: Request) => void (req.body.model = model);
+}
 
 function fixupMaxTokens(req: Request) {
   if (!req.body.max_completion_tokens) {

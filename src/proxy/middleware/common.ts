@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import http from "http";
-import httpProxy from "http-proxy";
+import { Socket } from "net";
 import { ZodError } from "zod";
 import { generateErrorMessage } from "zod-error";
 import { HttpError } from "../../shared/errors";
@@ -72,16 +72,23 @@ export function sendProxyError(
   });
 }
 
-export const handleProxyError: httpProxy.ErrorCallback = (err, req, res) => {
-  req.log.error(err, `Error during http-proxy-middleware request`);
-  classifyErrorAndSend(err, req as Request, res as Response);
-};
-
+/**
+ * Handles errors thrown during preparation of a proxy request (before it is
+ * sent to the upstream API), typically due to validation, quota, or other
+ * pre-flight checks. Depending on the error class, this function will send an
+ * appropriate error response to the client, streaming it if necessary.
+ */
 export const classifyErrorAndSend = (
   err: Error,
   req: Request,
-  res: Response
+  res: Response | Socket
 ) => {
+  if (res instanceof Socket) {
+    // We should always have an Express response object here, but http-proxy's
+    // ErrorCallback type says it could be just a Socket.
+    req.log.error(err, "Caught error while proxying request to target but cannot send error response to client.");
+    return res.destroy();
+  }
   try {
     const { statusCode, statusMessage, userMessage, ...errorDetails } =
       classifyError(err);

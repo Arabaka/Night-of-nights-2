@@ -35,14 +35,7 @@ export const transformOutboundPayload: RequestPreprocessor = async (req) => {
   // target API format. We don't need to transform them.
   const isNativePrompt = req.inboundApi === req.outboundApi;
   if (isNativePrompt) {
-    const result = API_REQUEST_VALIDATORS[req.inboundApi].safeParse(req.body);
-    if (!result.success) {
-      req.log.warn(
-        { issues: result.error.issues, body: req.body },
-        "Native prompt request validation failed."
-      );
-      throw result.error;
-    }
+    const result = API_REQUEST_VALIDATORS[req.inboundApi].parse(req.body);
     req.body = result.data;
     return;
   }

@@ -20,25 +20,19 @@ export { validateContextSize } from "./preprocessors/validate-context-size";
 export { validateModelFamily } from "./preprocessors/validate-model-family";
 export { validateVision } from "./preprocessors/validate-vision";
 
-// Proxy request mutators (runs just before proxying, usually to modify HTTP params)
-export {
-  addKey,
-  addKeyForEmbeddingsRequest,
-} from "./proxy-req-mutators/add-key";
-export { finalizeBody } from "./proxy-req-mutators/finalize-body";
-export { finalizeSignedRequest } from "./proxy-req-mutators/finalize-signed-request";
-export { stripHeaders } from "./proxy-req-mutators/strip-headers";
+// Proxy request mutators (runs every time request is dequeued, before proxying, usually for auth/signing)
+export { addKey, addKeyForEmbeddingsRequest } from "./mutators/add-key";
+export { finalizeBody } from "./mutators/finalize-body";
+export { finalizeSignedRequest } from "./mutators/finalize-signed-request";
+export { stripHeaders } from "./mutators/strip-headers";
 
 /**
- * Middleware that runs prior to the request being handled by http-proxy-
- * middleware.
+ * Middleware that runs prior to the request being queued or handled by
+ * http-proxy-middleware. You will not have access to the proxied
+ * request/response objects since they have not yet been sent to the API.
  *
- * Async functions can be used here, but you will not have access to the proxied
- * request/response objects, nor the data set by ProxyRequestMiddleware
- * functions as they have not yet been run.
- *
- * User will have been authenticated by the time this middleware runs, but your
- * request won't have been assigned an API key yet.
+ * User will have been authenticated by the proxy's gatekeeper, but the request
+ * won't have been assigned an upstream API key yet.
  *
  * Note that these functions only run once ever per request, even if the request
  * is automatically retried by the request queue middleware.
@@ -57,19 +51,3 @@ export type RequestPreprocessor = (req: Request) => void | Promise<void>;
 export type ProxyReqMutator = (
   changeManager: ProxyReqManager
 ) => void | Promise<void>;
-
-/**
- * Callbacks that run immediately before the request is sent to the API in
- * response to http-proxy-middleware's `proxyReq` event.
- *
- * Async functions cannot be used here as HPM's event emitter is not async and
- * will not wait for the promise to resolve before sending the request.
- *
- * Note that these functions may be run multiple times per request if the
- * first attempt is rate limited and the request is automatically retried by the
- * request queue middleware.
- */
-export type HPMRequestCallback = any;
-
-export const forceModel = (model: string) => (req: Request) =>
-  void (req.body.model = model);

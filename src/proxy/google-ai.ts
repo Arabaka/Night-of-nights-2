@@ -56,8 +56,7 @@ const handleModelRequest: RequestHandler = (_req, res) => {
   res.status(200).json(getModelsResponse());
 };
 
-/** Only used for non-streaming requests. */
-const googleAIResponseHandler: ProxyResHandlerWithBody = async (
+const googleAIBlockingResponseHandler: ProxyResHandlerWithBody = async (
   _proxyRes,
   req,
   res,
@@ -111,7 +110,7 @@ const googleAIProxy = createQueuedProxyMiddleware({
   },
   beforeProxy: [addGoogleAIKey],
   mutators: [finalizeSignedRequest],
-  blockingResponseHandler: googleAIResponseHandler,
+  blockingResponseHandler: googleAIBlockingResponseHandler,
 });
 
 const googleAIRouter = Router();

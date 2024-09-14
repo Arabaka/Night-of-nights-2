@@ -50,8 +50,7 @@ const handleModelRequest: RequestHandler = (_req, res) => {
   res.status(200).json(getModelsResponse());
 };
 
-/** Only used for non-streaming requests. */
-const gcpResponseHandler: ProxyResHandlerWithBody = async (
+const gcpBlockingResponseHandler: ProxyResHandlerWithBody = async (
   _proxyRes,
   req,
   res,
@@ -79,7 +78,7 @@ const gcpProxy = createQueuedProxyMiddleware({
   },
   beforeProxy: [signGcpRequest],
   mutators: [finalizeSignedRequest],
-  blockingResponseHandler: gcpResponseHandler,
+  blockingResponseHandler: gcpBlockingResponseHandler,
 });
 
 const oaiToChatPreprocessor = createPreprocessorMiddleware(
