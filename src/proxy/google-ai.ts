@@ -112,20 +112,6 @@ const googleAIProxy = createQueuedProxyMiddleware({
   beforeProxy: [addGoogleAIKey],
   mutators: [finalizeSignedRequest],
   blockingResponseHandler: googleAIResponseHandler,
-  /*
-TODO: implement logger
- 
-  logger: logger.child(
-    {},
-    {
-      redact: {
-        paths: ["*"],
-        censor: (v) =>
-          typeof v === "string" ? v.replace(/key=\S+/g, "key=xxxxxxx") : v,
-      },
-    }
-  ),
-*/
 });
 
 const googleAIRouter = Router();

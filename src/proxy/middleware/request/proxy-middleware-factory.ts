@@ -1,12 +1,19 @@
-import { Request } from "express";
+import { Request, Response } from "express";
 import { Readable } from "stream";
-import { createProxyMiddleware, Options } from "http-proxy-middleware";
+import ProxyServer from "http-proxy";
+import {
+  createProxyMiddleware,
+  Options,
+  debugProxyErrorsPlugin,
+  proxyEventsPlugin,
+} from "http-proxy-middleware";
 import { ProxyReqMutator, RequestPreprocessor } from "./index";
 import { logger } from "../../../logger";
 import { handleProxyError } from "../common";
 import { createOnProxyResHandler, ProxyResHandlerWithBody } from "../response";
 import { createQueueMiddleware } from "../../queue";
 import { getHttpAgents } from "../../../shared/network";
+import { Logger } from "pino";
 
 /**
  * Options for the `createQueuedProxyMiddleware` factory function.
@@ -63,7 +70,19 @@ export function createQueuedProxyMiddleware({
     changeOrigin: true,
     toProxy: true,
     selfHandleResponse: typeof blockingResponseHandler === "function",
-    logger: logger.child({ module: "hpm" }),
+    // Disable HPM logger plugin (requires re-adding the other default plugins).
+    // Contrary to name, debugProxyErrorsPlugin is not just for debugging and
+    // fixes several error handling/connection close issues in http-proxy core.
+    ejectPlugins: true,
+    // Inferred (via Options<express.Request>) as Plugin<express.Request>, but
+    // the default plugins only allow http.IncomingMessage for TReq. They are
+    // compatible with express.Request, so we can use them. `Plugin` type is not
+    // exported for some reason.
+    plugins: [
+      debugProxyErrorsPlugin,
+      pinoLoggerPlugin,
+      proxyEventsPlugin,
+    ] as any,
     on: {
       proxyRes: createOnProxyResHandler(
         blockingResponseHandler ? [blockingResponseHandler] : []
@@ -81,4 +100,34 @@ export function createQueuedProxyMiddleware({
   });
 
   return createQueueMiddleware({ beforeProxy, mutators, proxyMiddleware });
+}
+
+function pinoLoggerPlugin(proxyServer: ProxyServer<Request>) {
+  proxyServer.on("error", (err, req, res, target) => {
+    const originalUrl = req.originalUrl;
+    const targetUrl = target?.toString();
+    req.log.error(
+      { originalUrl, targetUrl, err },
+      "Error occurred while proxying request to target"
+    );
+  });
+  proxyServer.on("proxyReq", (proxyReq, req, res) => {
+    const originalUrl = req.originalUrl;
+    const targetUrl = res.req.url;
+    const target = `${proxyReq.protocol}://${proxyReq.host}`;
+    req.log.info(
+      { originalUrl, targetUrl, target },
+      "Sending upstream request..."
+    );
+  });
+  proxyServer.on("proxyRes", (proxyRes, req, res) => {
+    const originalUrl = req.originalUrl;
+    const targetUrl = res.req.url;
+    const statusCode = proxyRes.statusCode;
+    const host = res.req.headers["host"];
+    req.log.info(
+      { originalUrl, targetUrl, statusCode, host },
+      "Got upstream response."
+    );
+  });
 }

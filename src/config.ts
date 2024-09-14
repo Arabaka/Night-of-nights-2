@@ -654,8 +654,6 @@ export async function assertConfigIsValid() {
     }
   }
 
-  startupLogger.info("Configs checked.");
-
   // Ensure forks which add new secret-like config keys don't unwittingly expose
   // them to users.
   for (const key of getKeys(config)) {
