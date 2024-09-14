@@ -1,4 +1,4 @@
-import { HPMRequestCallback } from "../index";
+import { RequestPreprocessor } from "../index";
 
 const DISALLOWED_ORIGIN_SUBSTRINGS = "janitorai.com,janitor.ai".split(",");
 
@@ -13,7 +13,7 @@ class ZoomerForbiddenError extends Error {
  * Blocks requests from Janitor AI users with a fake, scary error message so I
  * stop getting emails asking for tech support.
  */
-export const blockZoomerOrigins: HPMRequestCallback = (_proxyReq, req) => {
+export const blockZoomerOrigins: RequestPreprocessor = (req) => {
   const origin = req.headers.origin || req.headers.referer;
   if (origin && DISALLOWED_ORIGIN_SUBSTRINGS.some((s) => origin.includes(s))) {
     // Venus-derivatives send a test prompt to check if the proxy is working.

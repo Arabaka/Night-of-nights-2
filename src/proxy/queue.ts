@@ -24,9 +24,10 @@ import {
 import { initializeSseStream } from "../shared/streaming";
 import { logger } from "../logger";
 import { getUniqueIps } from "./rate-limit";
-import { RequestPreprocessor } from "./middleware/request";
+import { ProxyReqMutator, RequestPreprocessor } from "./middleware/request";
 import { handleProxyError } from "./middleware/common";
 import { sendErrorToClient } from "./middleware/response/error-generator";
+import { ProxyReqManager } from "./middleware/request/proxy-req-manager";
 
 const queue: Request[] = [];
 const log = logger.child({ module: "request-queue" });
@@ -313,26 +314,42 @@ export function getQueueLength(partition: ModelFamily | "all" = "all") {
 }
 
 export function createQueueMiddleware({
-  beforeProxy,
+  beforeProxy = [],
+  mutators = [],
   proxyMiddleware,
 }: {
-  beforeProxy?: RequestPreprocessor;
+  beforeProxy?: RequestPreprocessor[];
+  mutators?: ProxyReqMutator[];
   proxyMiddleware: Handler;
 }): Handler {
   return async (req, res, next) => {
     req.proceed = async () => {
-      if (beforeProxy) {
-        try {
-          // Hack to let us run asynchronous middleware before the
-          // http-proxy-middleware handler. This is used to sign AWS requests
-          // before they are proxied, as the signing is asynchronous.
-          // Unlike RequestPreprocessors, this runs every time the request is
-          // dequeued, not just the first time.
-          await beforeProxy(req);
-        } catch (err) {
-          return handleProxyError(err, req, res);
+      // canonicalize the stream field which is set in a few places not always
+      // consistently
+      req.isStreaming = req.isStreaming || String(req.body.stream) === "true";
+      req.body.stream = req.isStreaming;
+
+      try {
+        // TODO: convert these to new ProxyReqMutator API
+        for (const middleware of beforeProxy) {
+          await middleware(req);
         }
+
+        // Just before executing the proxyMiddleware, we will create a
+        // ProxyReqManager to track modifications to the request. This allows
+        // us to revert those changes if the proxied request fails with a
+        // retryable error. That happens in proxyMiddleware's onProxyRes
+        // handler.
+        const changeManager = new ProxyReqManager(req);
+        req.changeManager = changeManager;
+        for (const mutator of mutators) {
+          await mutator(changeManager);
+        }
+      } catch (err) {
+        // Failure during request preparation is a fatal error.
+        return handleProxyError(err, req, res);
       }
+
       proxyMiddleware(req, res, next);
     };
 

@@ -5,6 +5,7 @@ import { Express } from "express-serve-static-core";
 import { APIFormat, Key } from "./key-management";
 import { User } from "./users/schema";
 import { LLMService, ModelFamily } from "./models";
+import { ProxyReqManager } from "../proxy/middleware/request/proxy-req-manager";
 
 declare global {
   namespace Express {
@@ -24,6 +25,7 @@ declare global {
       queueOutTime?: number;
       onAborted?: () => void;
       proceed: () => void;
+      changeManager?: ProxyReqManager;
       heartbeatInterval?: NodeJS.Timeout;
       monitorInterval?: NodeJS.Timeout;
       promptTokens?: number;

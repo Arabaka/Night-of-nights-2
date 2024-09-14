@@ -47,7 +47,7 @@ export type ProxyResHandlerWithBody = (
    */
   body: string | Record<string, any>
 ) => Promise<void>;
-export type ProxyResMiddleware = ProxyResHandlerWithBody[];
+export type ProxyResMiddleware = ProxyResHandlerWithBody[] | undefined;
 
 /**
  * Returns a on.proxyRes handler that executes the given middleware stack after
@@ -76,6 +76,10 @@ export const createOnProxyResHandler = (apiMiddleware: ProxyResMiddleware) => {
       : handleBlockingResponse;
     let lastMiddleware = initialHandler.name;
 
+    if (Buffer.isBuffer(req.body)) {
+      req.body = JSON.parse(req.body.toString());
+    }
+
     try {
       const body = await initialHandler(proxyRes, req, res);
       const middlewareStack: ProxyResMiddleware = [];
@@ -100,7 +104,7 @@ export const createOnProxyResHandler = (apiMiddleware: ProxyResMiddleware) => {
           saveImage,
           logPrompt,
           logEvent,
-          ...apiMiddleware
+          ...(apiMiddleware ?? [])
         );
       }
 
@@ -136,6 +140,12 @@ export const createOnProxyResHandler = (apiMiddleware: ProxyResMiddleware) => {
         res
           .status(500)
           .json({ error: "Internal server error", proxy_note: description });
+      }
+    } finally {
+      if (req.changeManager && !res.headersSent) {
+        // Restore the original request state if the request was retried.
+        req.changeManager.revert();
+        req.log.debug("Reverted request state after retry");
       }
     }
   };
@@ -723,22 +733,26 @@ const trackKeyRateLimit: ProxyResHandlerWithBody = async (proxyRes, req) => {
   keyPool.updateRateLimits(req.key!, proxyRes.headers);
 };
 
+
+const omittedHeaders = new Set<string>([
+  // Omit content-encoding because we will always decode the response body
+  "content-encoding",
+  // Omit transfer-encoding because we are using response.json which will
+  // set a content-length header, which is not valid for chunked responses.
+  "transfer-encoding",
+  // Don't set cookies from upstream APIs because proxied requests are stateless
+  "set-cookie",
+  "openai-organization",
+  "x-request-id",
+  "cf-ray",
+]);
 const copyHttpHeaders: ProxyResHandlerWithBody = async (
   proxyRes,
   _req,
   res
 ) => {
   Object.keys(proxyRes.headers).forEach((key) => {
-    // Omit content-encoding because we will always decode the response body
-    if (key === "content-encoding") {
-      return;
-    }
-    // We're usually using res.json() to send the response, which causes express
-    // to set content-length. That's not valid for chunked responses and some
-    // clients will reject it so we need to omit it.
-    if (key === "transfer-encoding") {
-      return;
-    }
+    if (omittedHeaders.has(key)) return;
     res.setHeader(key, proxyRes.headers[key] as string);
   });
 };
@@ -782,6 +796,6 @@ function getAwsErrorType(header: string | string[] | undefined) {
 
 function assertJsonResponse(body: any): asserts body is Record<string, any> {
   if (typeof body !== "object") {
-    throw new Error("Expected response to be an object");
+    throw new Error(`Expected response to be an object, got ${typeof body}`);
   }
 }

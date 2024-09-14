@@ -4,12 +4,14 @@ import { initializeSseStream } from "../../../shared/streaming";
 import { classifyErrorAndSend } from "../common";
 import {
   RequestPreprocessor,
+  blockZoomerOrigins,
   countPromptTokens,
   languageFilter,
   setApiFormat,
   transformOutboundPayload,
   validateContextSize,
-  validateVision,
+  validateModelFamily,
+  validateVision, applyQuotaLimits,
 } from ".";
 
 type RequestPreprocessorOptions = {
@@ -45,6 +47,7 @@ export const createPreprocessorMiddleware = (
 ): RequestHandler => {
   const preprocessors: RequestPreprocessor[] = [
     setApiFormat(apiFormat),
+    blockZoomerOrigins,
     ...(beforeTransform ?? []),
     transformOutboundPayload,
     countPromptTokens,
@@ -52,6 +55,8 @@ export const createPreprocessorMiddleware = (
     ...(afterTransform ?? []),
     validateContextSize,
     validateVision,
+    validateModelFamily,
+    applyQuotaLimits,
   ];
   return async (...args) => executePreprocessors(preprocessors, args);
 };
@@ -152,10 +157,7 @@ function isTestMessage(body: any) {
       messages[0].content === "Hi"
     );
   } else if (contents) {
-    return (
-      contents.length === 1 &&
-      contents[0].parts[0]?.text === "Hi"
-    );
+    return contents.length === 1 && contents[0].parts[0]?.text === "Hi";
   } else {
     return (
       prompt?.trim() === "Human: Hi\n\nAssistant:" ||

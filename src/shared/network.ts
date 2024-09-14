@@ -41,8 +41,8 @@ export function getHttpAgents() {
 
   if (iface) {
     const address = getInterfaceAddress(iface);
-    httpAgent = new http.Agent({ localAddress: address });
-    httpsAgent = new https.Agent({ localAddress: address });
+    httpAgent = new http.Agent({ localAddress: address, keepAlive: true });
+    httpsAgent = new https.Agent({ localAddress: address, keepAlive: true });
     log.info({ address }, "Using configured interface for outgoing requests.");
   } else if (proxyUrl) {
     process.env.HTTP_PROXY = proxyUrl;

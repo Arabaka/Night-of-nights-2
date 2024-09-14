@@ -1,8 +1,11 @@
 import express from "express";
 import crypto from "crypto";
-import { keyPool } from "../../../../shared/key-management";
-import { RequestPreprocessor } from "../index";
 import { AnthropicV1MessagesSchema } from "../../../../shared/api-schemas";
+import { keyPool } from "../../../../shared/key-management";
+import { getAxiosInstance } from "../../../../shared/network";
+import { RequestPreprocessor } from "../index";
+
+const axios = getAxiosInstance();
 
 const GCP_HOST = process.env.GCP_HOST || "%REGION%-aiplatform.googleapis.com";
 
@@ -134,19 +137,23 @@ async function exchangeJwtForAccessToken(
     assertion: signedJwt,
   };
 
-  const r = await fetch(authUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: Object.entries(params)
-      .map(([k, v]) => `${k}=${v}`)
-      .join("&"),
-  }).then((res) => res.json());
+  try {
+    const response = await axios.post(authUrl, params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
 
-  if (r.access_token) {
-    return [r.access_token, ""];
+    if (response.data.access_token) {
+      return [response.data.access_token, ""];
+    } else {
+      return [null, JSON.stringify(response.data)];
+    }
+  } catch (error) {
+    if ("response" in error && "data" in error.response) {
+      return [null, JSON.stringify(error.response.data)];
+    } else {
+      return [null, "An unexpected error occurred"];
+    }
   }
-
-  return [null, JSON.stringify(r)];
 }
 
 function str2ab(str: string): ArrayBuffer {

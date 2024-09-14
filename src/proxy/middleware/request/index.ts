@@ -1,16 +1,15 @@
 import type { Request } from "express";
-import type { ClientRequest } from "http";
-import type { ProxyReqCallback } from "http-proxy";
 
-export { createOnProxyReqHandler } from "./onproxyreq-factory";
+import { ProxyReqManager } from "./proxy-req-manager";
 export {
   createPreprocessorMiddleware,
   createEmbeddingsPreprocessorMiddleware,
 } from "./preprocessor-factory";
 
-// Express middleware (runs before http-proxy-middleware, can be async)
+// Preprocessors (runs before request is queued, usually body transformation/validation)
 export { addAzureKey } from "./preprocessors/add-azure-key";
 export { applyQuotaLimits } from "./preprocessors/apply-quota-limits";
+export { blockZoomerOrigins } from "./preprocessors/block-zoomer-origins";
 export { countPromptTokens } from "./preprocessors/count-prompt-tokens";
 export { languageFilter } from "./preprocessors/language-filter";
 export { setApiFormat } from "./preprocessors/set-api-format";
@@ -18,16 +17,17 @@ export { signAwsRequest } from "./preprocessors/sign-aws-request";
 export { signGcpRequest } from "./preprocessors/sign-vertex-ai-request";
 export { transformOutboundPayload } from "./preprocessors/transform-outbound-payload";
 export { validateContextSize } from "./preprocessors/validate-context-size";
+export { validateModelFamily } from "./preprocessors/validate-model-family";
 export { validateVision } from "./preprocessors/validate-vision";
 
-// http-proxy-middleware callbacks (runs on onProxyReq, cannot be async)
-export { addAnthropicPreamble } from "./onproxyreq/add-anthropic-preamble";
-export { addKey, addKeyForEmbeddingsRequest } from "./onproxyreq/add-key";
-export { blockZoomerOrigins } from "./onproxyreq/block-zoomer-origins";
-export { checkModelFamily } from "./onproxyreq/check-model-family";
-export { finalizeBody } from "./onproxyreq/finalize-body";
-export { finalizeSignedRequest } from "./onproxyreq/finalize-signed-request";
-export { stripHeaders } from "./onproxyreq/strip-headers";
+// Proxy request mutators (runs just before proxying, usually to modify HTTP params)
+export {
+  addKey,
+  addKeyForEmbeddingsRequest,
+} from "./proxy-req-mutators/add-key";
+export { finalizeBody } from "./proxy-req-mutators/finalize-body";
+export { finalizeSignedRequest } from "./proxy-req-mutators/finalize-signed-request";
+export { stripHeaders } from "./proxy-req-mutators/strip-headers";
 
 /**
  * Middleware that runs prior to the request being handled by http-proxy-
@@ -46,6 +46,19 @@ export { stripHeaders } from "./onproxyreq/strip-headers";
 export type RequestPreprocessor = (req: Request) => void | Promise<void>;
 
 /**
+ * Middleware that runs immediately before the request is proxied to the
+ * upstream API, after dequeueing the request from the request queue.
+ *
+ * Because these middleware may be run multiple times per request if a retryable
+ * error occurs and the request put back in the queue, they must be idempotent.
+ * A change manager is provided to allow the middleware to make changes to the
+ * request which can be automatically reverted.
+ */
+export type ProxyReqMutator = (
+  changeManager: ProxyReqManager
+) => void | Promise<void>;
+
+/**
  * Callbacks that run immediately before the request is sent to the API in
  * response to http-proxy-middleware's `proxyReq` event.
  *
@@ -56,7 +69,7 @@ export type RequestPreprocessor = (req: Request) => void | Promise<void>;
  * first attempt is rate limited and the request is automatically retried by the
  * request queue middleware.
  */
-export type HPMRequestCallback = ProxyReqCallback<ClientRequest, Request>;
+export type HPMRequestCallback = any;
 
 export const forceModel = (model: string) => (req: Request) =>
   void (req.body.model = model);

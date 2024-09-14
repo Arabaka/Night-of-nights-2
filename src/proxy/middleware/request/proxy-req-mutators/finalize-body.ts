@@ -1,8 +1,10 @@
 import { fixRequestBody } from "http-proxy-middleware";
-import type { HPMRequestCallback } from "../index";
+import type { HPMRequestCallback, ProxyReqMutator } from "../index";
 
-/** Finalize the rewritten request body. Must be the last rewriter. */
-export const finalizeBody: HPMRequestCallback = (proxyReq, req) => {
+/** Finalize the rewritten request body. Must be the last mutator. */
+export const finalizeBody: ProxyReqMutator = (manager) => {
+  const req = manager.request;
+
   if (["POST", "PUT", "PATCH"].includes(req.method ?? "") && req.body) {
     // For image generation requests, remove stream flag.
     if (req.outboundApi === "openai-image") {
@@ -14,10 +16,8 @@ export const finalizeBody: HPMRequestCallback = (proxyReq, req) => {
     }
 
     const updatedBody = JSON.stringify(req.body);
-    proxyReq.setHeader("Content-Length", Buffer.byteLength(updatedBody));
+    manager.setHeader("Content-Length", String(Buffer.byteLength(updatedBody)));
+    manager.setBody(Buffer.from(updatedBody));
     (req as any).rawBody = Buffer.from(updatedBody);
-
-    // body-parser and http-proxy-middleware don't play nice together
-    fixRequestBody(proxyReq, req);
   }
 };
