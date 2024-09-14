@@ -36,7 +36,7 @@ export const transformOutboundPayload: RequestPreprocessor = async (req) => {
   const isNativePrompt = req.inboundApi === req.outboundApi;
   if (isNativePrompt) {
     const result = API_REQUEST_VALIDATORS[req.inboundApi].parse(req.body);
-    req.body = result.data;
+    req.body = result;
     return;
   }
 

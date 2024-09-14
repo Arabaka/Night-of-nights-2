@@ -17,7 +17,7 @@ export const countPromptTokens: RequestPreprocessor = async (req) => {
 
   switch (service) {
     case "openai": {
-      req.outputTokens = req.body.max_tokens;
+      req.outputTokens = req.body.max_completion_tokens || req.body.max_tokens;
       const prompt: OpenAIChatMessage[] = req.body.messages;
       result = await countTokens({ req, prompt, service });
       break;
