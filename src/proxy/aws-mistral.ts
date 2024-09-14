@@ -1,22 +1,16 @@
-import { Request } from "express";
+import { Request, Router } from "express";
 import {
-  createOnProxyResHandler,
-  ProxyResHandlerWithBody,
-} from "./middleware/response";
-import { createQueueMiddleware } from "./queue";
+  detectMistralInputApi,
+  transformMistralTextToMistralChat,
+} from "./mistral-ai";
+import { ipLimiter } from "./rate-limit";
+import { ProxyResHandlerWithBody } from "./middleware/response";
 import {
-  createOnProxyReqHandler,
   createPreprocessorMiddleware,
   finalizeSignedRequest,
   signAwsRequest,
 } from "./middleware/request";
-import { createProxyMiddleware } from "http-proxy-middleware";
-import { logger } from "../logger";
-import { handleProxyError } from "./middleware/common";
-import { Router } from "express";
-import { ipLimiter } from "./rate-limit";
-import { detectMistralInputApi, transformMistralTextToMistralChat } from "./mistral-ai";
-import { getHttpAgents } from "../shared/network";
+import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 
 const awsMistralBlockingResponseHandler: ProxyResHandlerWithBody = async (
   _proxyRes,
@@ -40,24 +34,14 @@ const awsMistralBlockingResponseHandler: ProxyResHandlerWithBody = async (
   res.status(200).json({ ...newBody, proxy: body.proxy });
 };
 
-const awsMistralProxy = createQueueMiddleware({
-  beforeProxy: signAwsRequest,
-  proxyMiddleware: createProxyMiddleware({
-    target: "bad-target-will-be-rewritten",
-    agent: getHttpAgents()[0],
-    router: ({ signedRequest }) => {
-      if (!signedRequest) throw new Error("Must sign request before proxying");
-      return `${signedRequest.protocol}//${signedRequest.hostname}`;
-    },
-    changeOrigin: true,
-    selfHandleResponse: true,
-    logger,
-    on: {
-      proxyReq: createOnProxyReqHandler({ pipeline: [finalizeSignedRequest] }),
-      proxyRes: createOnProxyResHandler([awsMistralBlockingResponseHandler]),
-      error: handleProxyError,
-    },
-  }),
+const awsMistralProxy = createQueuedProxyMiddleware({
+  target: ({ signedRequest }) => {
+    if (!signedRequest) throw new Error("Must sign request before proxying");
+    return `${signedRequest.protocol}//${signedRequest.hostname}`;
+  },
+  beforeProxy: [signAwsRequest],
+  mutators: [finalizeSignedRequest],
+  blockingResponseHandler: awsMistralBlockingResponseHandler,
 });
 
 function maybeReassignModel(req: Request) {

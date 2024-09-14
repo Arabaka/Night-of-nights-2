@@ -1,22 +1,15 @@
 import { Request, RequestHandler, Router } from "express";
-import { createProxyMiddleware } from "http-proxy-middleware";
 import { config } from "../config";
-import { logger } from "../logger";
-import { createQueueMiddleware } from "./queue";
+import { transformAnthropicChatResponseToOpenAI } from "./anthropic";
 import { ipLimiter } from "./rate-limit";
-import { handleProxyError } from "./middleware/common";
 import {
   createPreprocessorMiddleware,
-  signGcpRequest,
   finalizeSignedRequest,
-  createOnProxyReqHandler,
+  signGcpRequest,
 } from "./middleware/request";
-import {
-  ProxyResHandlerWithBody,
-  createOnProxyResHandler,
-} from "./middleware/response";
-import { transformAnthropicChatResponseToOpenAI } from "./anthropic";
-import { getHttpAgents } from "../shared/network";
+import { ProxyResHandlerWithBody } from "./middleware/response";
+import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
+
 const LATEST_GCP_SONNET_MINOR_VERSION = "20240229";
 
 let modelsCache: any = null;
@@ -79,24 +72,14 @@ const gcpResponseHandler: ProxyResHandlerWithBody = async (
   res.status(200).json({ ...newBody, proxy: body.proxy });
 };
 
-const gcpProxy = createQueueMiddleware({
-  beforeProxy: signGcpRequest,
-  proxyMiddleware: createProxyMiddleware({
-    target: "bad-target-will-be-rewritten",
-    agent: getHttpAgents()[0],
-    router: ({ signedRequest }) => {
-      if (!signedRequest) throw new Error("Must sign request before proxying");
-      return `${signedRequest.protocol}//${signedRequest.hostname}`;
-    },
-    changeOrigin: true,
-    selfHandleResponse: true,
-    logger,
-    on: {
-      proxyReq: createOnProxyReqHandler({ pipeline: [finalizeSignedRequest] }),
-      proxyRes: createOnProxyResHandler([gcpResponseHandler]),
-      error: handleProxyError,
-    },
-  }),
+const gcpProxy = createQueuedProxyMiddleware({
+  target: ({ signedRequest }) => {
+    if (!signedRequest) throw new Error("Must sign request before proxying");
+    return `${signedRequest.protocol}//${signedRequest.hostname}`;
+  },
+  beforeProxy: [signGcpRequest],
+  mutators: [finalizeSignedRequest],
+  blockingResponseHandler: gcpResponseHandler,
 });
 
 const oaiToChatPreprocessor = createPreprocessorMiddleware(
@@ -140,7 +123,7 @@ gcpRouter.post(
  * - frontends sending Anthropic model names that GCP doesn't recognize
  * - frontends sending OpenAI model names because they expect the proxy to
  *   translate them
- * 
+ *
  * If client sends GCP model ID it will be used verbatim. Otherwise, various
  * strategies are used to try to map a non-GCP model name to GCP model ID.
  */
@@ -169,7 +152,7 @@ function maybeReassignModel(req: Request) {
   }
 
   const [_, _cl, instant, _v, major, _sep, minor, _ctx, name, _rev] = match;
-  
+
   const ver = minor ? `${major}.${minor}` : major;
   switch (ver) {
     case "3":

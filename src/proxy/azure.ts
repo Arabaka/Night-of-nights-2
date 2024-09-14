@@ -1,22 +1,14 @@
 import { RequestHandler, Router } from "express";
-import { createProxyMiddleware } from "http-proxy-middleware";
 import { config } from "../config";
-import { logger } from "../logger";
 import { generateModelList } from "./openai";
-import { createQueueMiddleware } from "./queue";
 import { ipLimiter } from "./rate-limit";
-import { handleProxyError } from "./middleware/common";
 import {
   addAzureKey,
-  createOnProxyReqHandler,
   createPreprocessorMiddleware,
   finalizeSignedRequest,
 } from "./middleware/request";
-import {
-  createOnProxyResHandler,
-  ProxyResHandlerWithBody,
-} from "./middleware/response";
-import { getHttpAgents } from "../shared/network";
+import { ProxyResHandlerWithBody } from "./middleware/response";
+import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 
 let modelsCache: any = null;
 let modelsCacheTime = 0;
@@ -48,26 +40,17 @@ const azureOpenaiResponseHandler: ProxyResHandlerWithBody = async (
   res.status(200).json({ ...body, proxy: body.proxy });
 };
 
-const azureOpenAIProxy = createQueueMiddleware({
-  beforeProxy: addAzureKey,
-  proxyMiddleware: createProxyMiddleware({
-    target: "will be set by router",
-    agent: getHttpAgents()[0],
-    router: (req) => {
-      if (!req.signedRequest) throw new Error("signedRequest not set");
-      const { hostname, path } = req.signedRequest;
-      return `https://${hostname}${path}`;
-    },
-    changeOrigin: true,
-    selfHandleResponse: true,
-    logger,
-    on: {
-      proxyReq: createOnProxyReqHandler({ pipeline: [finalizeSignedRequest] }),
-      proxyRes: createOnProxyResHandler([azureOpenaiResponseHandler]),
-      error: handleProxyError,
-    },
-  }),
+const azureOpenAIProxy = createQueuedProxyMiddleware({
+  target: ({ signedRequest }) => {
+    if (!signedRequest) throw new Error("Must sign request before proxying");
+    const { hostname, path } = signedRequest;
+    return `https://${hostname}${path}`;
+  },
+  beforeProxy: [addAzureKey],
+  mutators: [finalizeSignedRequest],
+  blockingResponseHandler: azureOpenaiResponseHandler,
 });
+
 
 const azureOpenAIRouter = Router();
 azureOpenAIRouter.get("/v1/models", handleModelRequest);

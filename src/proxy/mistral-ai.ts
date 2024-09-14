@@ -1,28 +1,20 @@
-import express, { Request, RequestHandler, Router } from "express";
-import { createProxyMiddleware } from "http-proxy-middleware";
-import { config } from "../config";
+import { Request, RequestHandler, Router } from "express";
+import { BadRequestError } from "../shared/errors";
 import { keyPool } from "../shared/key-management";
 import {
   getMistralAIModelFamily,
   MistralAIModelFamily,
   ModelFamily,
 } from "../shared/models";
-import { logger } from "../logger";
-import { createQueueMiddleware } from "./queue";
+import { config } from "../config";
 import { ipLimiter } from "./rate-limit";
-import { handleProxyError } from "./middleware/common";
 import {
   addKey,
-  createOnProxyReqHandler,
   createPreprocessorMiddleware,
   finalizeBody,
 } from "./middleware/request";
-import {
-  createOnProxyResHandler,
-  ProxyResHandlerWithBody,
-} from "./middleware/response";
-import { BadRequestError } from "../shared/errors";
-import { getHttpAgents } from "../shared/network";
+import { ProxyResHandlerWithBody } from "./middleware/response";
+import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 
 // Mistral can't settle on a single naming scheme and deprecates models within
 // months of releasing them so this list is hard to keep up to date. 2024-07-28
@@ -128,21 +120,10 @@ export function transformMistralTextToMistralChat(textBody: any) {
   };
 }
 
-const mistralAIProxy = createQueueMiddleware({
-  proxyMiddleware: createProxyMiddleware({
-    target: "https://api.mistral.ai",
-    agent: getHttpAgents()[0],
-    changeOrigin: true,
-    selfHandleResponse: true,
-    logger,
-    on: {
-      proxyReq: createOnProxyReqHandler({
-        pipeline: [addKey, finalizeBody],
-      }),
-      proxyRes: createOnProxyResHandler([mistralAIResponseHandler]),
-      error: handleProxyError,
-    },
-  }),
+const mistralAIProxy = createQueuedProxyMiddleware({
+  target: "https://api.mistral.ai",
+  mutators: [addKey, finalizeBody],
+  blockingResponseHandler: mistralAIResponseHandler,
 });
 
 const mistralAIRouter = Router();

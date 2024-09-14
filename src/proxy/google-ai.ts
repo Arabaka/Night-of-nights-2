@@ -1,23 +1,15 @@
 import { Request, RequestHandler, Router } from "express";
-import { createProxyMiddleware } from "http-proxy-middleware";
 import { v4 } from "uuid";
+import { GoogleAIKey, keyPool } from "../shared/key-management";
 import { config } from "../config";
-import { logger } from "../logger";
-import { createQueueMiddleware } from "./queue";
 import { ipLimiter } from "./rate-limit";
-import { handleProxyError } from "./middleware/common";
 import {
-  createOnProxyReqHandler,
   createPreprocessorMiddleware,
   finalizeSignedRequest,
 } from "./middleware/request";
-import {
-  createOnProxyResHandler,
-  ProxyResHandlerWithBody,
-} from "./middleware/response";
+import { ProxyResHandlerWithBody } from "./middleware/response";
 import { addGoogleAIKey } from "./middleware/request/preprocessors/add-google-ai-key";
-import { GoogleAIKey, keyPool } from "../shared/key-management";
-import { getHttpAgents } from "../shared/network";
+import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 
 let modelsCache: any = null;
 let modelsCacheTime = 0;
@@ -111,34 +103,29 @@ function transformGoogleAIResponse(
   };
 }
 
-const googleAIProxy = createQueueMiddleware({
-  beforeProxy: addGoogleAIKey,
-  proxyMiddleware: createProxyMiddleware({
-    target: "bad-target-will-be-rewritten",
-    agent: getHttpAgents()[0],
-    router: ({ signedRequest }) => {
-      const { protocol, hostname, path } = signedRequest;
-      return `${protocol}//${hostname}${path}`;
-    },
-    changeOrigin: true,
-    selfHandleResponse: true,
-    // Prevent logging of the API key by HPM
-    logger: logger.child(
-      {},
-      {
-        redact: {
-          paths: ["*"],
-          censor: (v) =>
-            typeof v === "string" ? v.replace(/key=\S+/g, "key=xxxxxxx") : v,
-        },
-      }
-    ),
-    on: {
-      proxyReq: createOnProxyReqHandler({ pipeline: [finalizeSignedRequest] }),
-      proxyRes: createOnProxyResHandler([googleAIResponseHandler]),
-      error: handleProxyError,
-    },
-  }),
+const googleAIProxy = createQueuedProxyMiddleware({
+  target: ({ signedRequest }) => {
+    if (!signedRequest) throw new Error("Must sign request before proxying");
+    const { protocol, hostname, path } = signedRequest;
+    return `${protocol}//${hostname}${path}`;
+  },
+  beforeProxy: [addGoogleAIKey],
+  mutators: [finalizeSignedRequest],
+  blockingResponseHandler: googleAIResponseHandler,
+  /*
+TODO: implement logger
+ 
+  logger: logger.child(
+    {},
+    {
+      redact: {
+        paths: ["*"],
+        censor: (v) =>
+          typeof v === "string" ? v.replace(/key=\S+/g, "key=xxxxxxx") : v,
+      },
+    }
+  ),
+*/
 });
 
 const googleAIRouter = Router();

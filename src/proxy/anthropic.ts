@@ -1,23 +1,14 @@
-import { Request, Response, RequestHandler, Router } from "express";
-import { createProxyMiddleware } from "http-proxy-middleware";
+import { Request, RequestHandler, Router } from "express";
 import { config } from "../config";
-import { logger } from "../logger";
-import { createQueueMiddleware } from "./queue";
 import { ipLimiter } from "./rate-limit";
-import { handleProxyError } from "./middleware/common";
 import {
   addKey,
-  addAnthropicPreamble,
   createPreprocessorMiddleware,
   finalizeBody,
-  createOnProxyReqHandler,
 } from "./middleware/request";
-import {
-  ProxyResHandlerWithBody,
-  createOnProxyResHandler,
-} from "./middleware/response";
-import { sendErrorToClient } from "./middleware/response/error-generator";
-import { getHttpAgents } from "../shared/network";
+import { ProxyResHandlerWithBody } from "./middleware/response";
+import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
+import { ProxyReqManager } from "./middleware/request/proxy-req-manager";
 
 let modelsCache: any = null;
 let modelsCacheTime = 0;
@@ -202,39 +193,30 @@ function setAnthropicBetaHeader(req: Request) {
   }
 }
 
-const anthropicProxy = createQueueMiddleware({
-  proxyMiddleware: createProxyMiddleware({
-    target: "https://api.anthropic.com",
-    agent: getHttpAgents()[0],
-    changeOrigin: true,
-    selfHandleResponse: true,
-    logger,
-    on: {
-      proxyReq: createOnProxyReqHandler({
-        pipeline: [addKey, addAnthropicPreamble, finalizeBody],
-      }),
-      proxyRes: createOnProxyResHandler([anthropicBlockingResponseHandler]),
-      error: handleProxyError,
-    },
-    // Abusing pathFilter to rewrite the paths dynamically.
-    pathFilter: (pathname, req) => {
-      const isText = req.outboundApi === "anthropic-text";
-      const isChat = req.outboundApi === "anthropic-chat";
-      if (isChat && pathname === "/v1/complete") {
-        req.url = "/v1/messages";
-      }
-      if (isText && pathname === "/v1/chat/completions") {
-        req.url = "/v1/complete";
-      }
-      if (isChat && pathname === "/v1/chat/completions") {
-        req.url = "/v1/messages";
-      }
-      if (isChat && ["sonnet", "opus"].includes(req.params.type)) {
-        req.url = "/v1/messages";
-      }
-      return true;
-    },
-  }),
+function selectUpstreamPath(manager: ProxyReqManager) {
+  const req = manager.request;
+  const pathname = req.url.split("?")[0];
+  req.log.debug({ pathname }, "Anthropic path filter");
+  const isText = req.outboundApi === "anthropic-text";
+  const isChat = req.outboundApi === "anthropic-chat";
+  if (isChat && pathname === "/v1/complete") {
+    manager.setPath("/v1/messages");
+  }
+  if (isText && pathname === "/v1/chat/completions") {
+    manager.setPath("/v1/complete");
+  }
+  if (isChat && pathname === "/v1/chat/completions") {
+    manager.setPath("/v1/messages");
+  }
+  if (isChat && ["sonnet", "opus"].includes(req.params.type)) {
+    manager.setPath("/v1/messages");
+  }
+}
+
+const anthropicProxy = createQueuedProxyMiddleware({
+  target: "https://api.anthropic.com",
+  mutators: [selectUpstreamPath, addKey, finalizeBody],
+  blockingResponseHandler: anthropicBlockingResponseHandler,
 });
 
 const nativeAnthropicChatPreprocessor = createPreprocessorMiddleware(

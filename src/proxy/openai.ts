@@ -1,27 +1,19 @@
 import { Request, RequestHandler, Router } from "express";
-import { createProxyMiddleware } from "http-proxy-middleware";
 import { config } from "../config";
 import { AzureOpenAIKey, keyPool, OpenAIKey } from "../shared/key-management";
 import { getOpenAIModelFamily } from "../shared/models";
-import { logger } from "../logger";
-import { createQueueMiddleware } from "./queue";
 import { ipLimiter } from "./rate-limit";
-import { handleProxyError } from "./middleware/common";
 import {
   addKey,
   addKeyForEmbeddingsRequest,
   createEmbeddingsPreprocessorMiddleware,
-  createOnProxyReqHandler,
   createPreprocessorMiddleware,
   finalizeBody,
   forceModel,
   RequestPreprocessor,
 } from "./middleware/request";
-import {
-  createOnProxyResHandler,
-  ProxyResHandlerWithBody,
-} from "./middleware/response";
-import { getHttpAgents } from "../shared/network";
+import { ProxyResHandlerWithBody } from "./middleware/response";
+import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 
 // https://platform.openai.com/docs/models/overview
 let modelsCache: any = null;
@@ -145,33 +137,15 @@ function transformTurboInstructResponse(
   return transformed;
 }
 
-const openaiProxy = createQueueMiddleware({
-  proxyMiddleware: createProxyMiddleware({
-    target: "https://api.openai.com",
-    agent: getHttpAgents()[0],
-    changeOrigin: true,
-    selfHandleResponse: true,
-    logger,
-    on: {
-      proxyReq: createOnProxyReqHandler({ pipeline: [addKey, finalizeBody] }),
-      proxyRes: createOnProxyResHandler([openaiResponseHandler]),
-      error: handleProxyError,
-    },
-  }),
+const openaiProxy = createQueuedProxyMiddleware({
+  mutators: [addKey, finalizeBody],
+  target: "https://api.openai.com",
+  blockingResponseHandler: openaiResponseHandler,
 });
 
-const openaiEmbeddingsProxy = createProxyMiddleware({
+const openaiEmbeddingsProxy = createQueuedProxyMiddleware({
+  mutators: [addKeyForEmbeddingsRequest, finalizeBody],
   target: "https://api.openai.com",
-  agent: getHttpAgents()[0],
-  changeOrigin: true,
-  selfHandleResponse: false,
-  logger,
-  on: {
-    proxyReq: createOnProxyReqHandler({
-      pipeline: [addKeyForEmbeddingsRequest, finalizeBody],
-    }),
-    error: handleProxyError,
-  },
 });
 
 const openaiRouter = Router();

@@ -1,25 +1,17 @@
 import { Request, RequestHandler, Router } from "express";
-import { createProxyMiddleware } from "http-proxy-middleware";
 import { v4 } from "uuid";
-import { logger } from "../logger";
-import { createQueueMiddleware } from "./queue";
-import { ipLimiter } from "./rate-limit";
-import { handleProxyError } from "./middleware/common";
-import {
-  createPreprocessorMiddleware,
-  signAwsRequest,
-  finalizeSignedRequest,
-  createOnProxyReqHandler,
-} from "./middleware/request";
-import {
-  ProxyResHandlerWithBody,
-  createOnProxyResHandler,
-} from "./middleware/response";
 import {
   transformAnthropicChatResponseToAnthropicText,
   transformAnthropicChatResponseToOpenAI,
 } from "./anthropic";
-import { getHttpAgents } from "../shared/network";
+import { ipLimiter } from "./rate-limit";
+import {
+  createPreprocessorMiddleware,
+  finalizeSignedRequest,
+  signAwsRequest,
+} from "./middleware/request";
+import { ProxyResHandlerWithBody } from "./middleware/response";
+import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 
 /** Only used for non-streaming requests. */
 const awsResponseHandler: ProxyResHandlerWithBody = async (
@@ -90,24 +82,14 @@ function transformAwsTextResponseToOpenAI(
   };
 }
 
-const awsClaudeProxy = createQueueMiddleware({
-  beforeProxy: signAwsRequest,
-  proxyMiddleware: createProxyMiddleware({
-    target: "bad-target-will-be-rewritten",
-    agent: getHttpAgents()[0],
-    router: ({ signedRequest }) => {
-      if (!signedRequest) throw new Error("Must sign request before proxying");
-      return `${signedRequest.protocol}//${signedRequest.hostname}`;
-    },
-    changeOrigin: true,
-    selfHandleResponse: true,
-    logger,
-    on: {
-      proxyReq: createOnProxyReqHandler({ pipeline: [finalizeSignedRequest] }),
-      proxyRes: createOnProxyResHandler([awsResponseHandler]),
-      error: handleProxyError,
-    },
-  }),
+const awsClaudeProxy = createQueuedProxyMiddleware({
+  target: ({ signedRequest }) => {
+    if (!signedRequest) throw new Error("Must sign request before proxying");
+    return `${signedRequest.protocol}//${signedRequest.hostname}`;
+  },
+  beforeProxy: [signAwsRequest],
+  mutators: [finalizeSignedRequest],
+  blockingResponseHandler: awsResponseHandler,
 });
 
 const nativeTextPreprocessor = createPreprocessorMiddleware(
