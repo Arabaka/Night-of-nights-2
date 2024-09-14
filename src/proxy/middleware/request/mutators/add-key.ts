@@ -8,6 +8,8 @@ import { ProxyReqMutator } from "../index";
 export const addKey: ProxyReqMutator = (manager) => {
   const req = manager.request;
 
+  throw new Error("test");
+
   let assignedKey: Key;
   const { service, inboundApi, outboundApi, body } = req;
 
