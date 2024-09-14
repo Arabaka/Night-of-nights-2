@@ -1,8 +1,10 @@
-import axios, { AxiosError } from "axios";
-import type { GoogleAIModelFamily } from "../../models";
+import { AxiosError } from "axios";
+import { GoogleAIModelFamily, getGoogleAIModelFamily } from "../../models";
+import { getAxiosInstance } from "../../network";
 import { KeyCheckerBase } from "../key-checker-base";
 import type { GoogleAIKey, GoogleAIKeyProvider } from "./provider";
-import { getGoogleAIModelFamily } from "../../models";
+
+const axios = getAxiosInstance();
 
 const MIN_CHECK_INTERVAL = 3 * 1000; // 3 seconds
 const KEY_CHECK_PERIOD = 3 * 60 * 60 * 1000; // 3 hours

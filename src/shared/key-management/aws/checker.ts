@@ -1,12 +1,15 @@
 import { Sha256 } from "@aws-crypto/sha256-js";
 import { SignatureV4 } from "@smithy/signature-v4";
 import { HttpRequest } from "@smithy/protocol-http";
-import axios, { AxiosError, AxiosHeaders, AxiosRequestConfig } from "axios";
+import { AxiosError, AxiosHeaders, AxiosRequestConfig } from "axios";
 import { URL } from "url";
 import { config } from "../../../config";
 import { getAwsBedrockModelFamily } from "../../models";
+import { getAxiosInstance } from "../../network";
 import { KeyCheckerBase } from "../key-checker-base";
 import type { AwsBedrockKey, AwsBedrockKeyProvider } from "./provider";
+
+const axios = getAxiosInstance();
 
 type ParentModelId = string;
 type AliasModelId = string;

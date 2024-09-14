@@ -1,7 +1,10 @@
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
+import { getAzureOpenAIModelFamily } from "../../models";
+import { getAxiosInstance } from "../../network";
 import { KeyCheckerBase } from "../key-checker-base";
 import type { AzureOpenAIKey, AzureOpenAIKeyProvider } from "./provider";
-import { getAzureOpenAIModelFamily } from "../../models";
+
+const axios = getAxiosInstance();
 
 const MIN_CHECK_INTERVAL = 3 * 1000; // 3 seconds
 const KEY_CHECK_PERIOD = 60 * 60 * 1000; // 1 hour

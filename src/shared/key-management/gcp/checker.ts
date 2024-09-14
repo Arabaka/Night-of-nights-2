@@ -1,8 +1,11 @@
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
 import crypto from "crypto";
+import { GcpModelFamily } from "../../models";
+import { getAxiosInstance } from "../../network";
 import { KeyCheckerBase } from "../key-checker-base";
 import type { GcpKey, GcpKeyProvider } from "./provider";
-import { GcpModelFamily } from "../../models";
+
+const axios = getAxiosInstance();
 
 const MIN_CHECK_INTERVAL = 3 * 1000; // 3 seconds
 const KEY_CHECK_PERIOD = 90 * 60 * 1000; // 90 minutes
