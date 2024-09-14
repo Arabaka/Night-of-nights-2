@@ -7,7 +7,7 @@
     "database:migrate": "ts-node scripts/migrate.ts",
     "postinstall": "patch-package",
     "prepare": "husky install",
-    "start": "node build/server.js",
+    "start": "node --trace-deprecation --trace-warnings build/server.js",
     "start:dev": "nodemon --watch src --exec ts-node --transpile-only src/server.ts",
     "start:debug": "ts-node --inspect --transpile-only src/server.ts",
     "start:replit": "tsc && node build/server.js",
@@ -40,7 +40,7 @@
     "ejs": "^3.1.10",
     "express": "^4.19.3",
     "express-session": "^1.17.3",
-    "firebase-admin": "^12.3.1",
+    "firebase-admin": "^12.5.0",
     "glob": "^10.3.12",
     "googleapis": "^122.0.0",
     "http-proxy": "1.18.1",
@@ -89,8 +89,8 @@
     "typescript": "^5.4.2"
   },
   "overrides": {
-    "braces": "^3.0.3",
-    "fast-xml-parser": "^4.4.1",
-    "follow-redirects": "^1.15.4"
+    "node-fetch@2.x": {
+      "whatwg-url": "14.x"
+    }
   }
 }
