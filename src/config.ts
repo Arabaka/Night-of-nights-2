@@ -385,6 +385,24 @@ type Config = {
    * Accepts floats.
    */
   tokensPunishmentFactor: number;
+  /**
+   * Configuration for HTTP requests made by the proxy to other servers, such
+   * as when checking keys or forwarding users' requests to external services.
+   * If not set, all requests will be made using the default agent.
+   *
+   * If set, the proxy may make requests to other servers using the specified
+   * settings. This is useful if you wish to route users' requests through
+   * another proxy or VPN, or if you have multiple network interfaces and want
+   * to use a specific one for outgoing requests.
+   *
+   * The following keys are supported:
+   * - interface: The name of the network interface to use.
+   * - socks5Url: The URL of a SOCKS5 proxy to use.
+   */
+  httpAgent?: {
+    interface?: string;
+    socks5Url?: string;
+  };
 };
 
 // To change configs, create a file called .env in the root directory.
@@ -491,6 +509,10 @@ export const config: Config = {
   ),
   ipBlacklist: parseCsv(getEnvWithDefault("IP_BLACKLIST", "")),
   tokensPunishmentFactor: getEnvWithDefault("TOKENS_PUNISHMENT_FACTOR", 0.0),
+  httpAgent: {
+    interface: getEnvWithDefault("HTTP_AGENT_INTERFACE", undefined),
+    socks5Url: getEnvWithDefault("HTTP_AGENT_SOCKS5_URL", undefined),
+  },
 } as const;
 
 function generateSigningKey() {
@@ -610,6 +632,10 @@ export async function assertConfigIsValid() {
     );
   }
 
+  if (Object.values(config.httpAgent || {}).filter(Boolean).length === 0) {
+    delete config.httpAgent;
+  }
+
   // Ensure forks which add new secret-like config keys don't unwittingly expose
   // them to users.
   for (const key of getKeys(config)) {
@@ -631,7 +657,10 @@ export async function assertConfigIsValid() {
  * Config keys that are masked on the info page, but not hidden as their
  * presence may be relevant to the user due to privacy implications.
  */
-export const SENSITIVE_KEYS: (keyof Config)[] = ["googleSheetsSpreadsheetId"];
+export const SENSITIVE_KEYS: (keyof Config)[] = [
+  "googleSheetsSpreadsheetId",
+  "httpAgent",
+];
 
 /**
  * Config keys that are not displayed on the info page at all, generally because

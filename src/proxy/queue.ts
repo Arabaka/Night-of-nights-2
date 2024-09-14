@@ -139,7 +139,14 @@ export function dequeue(partition: ModelFamily): Request | undefined {
   }
 
   const req = modelQueue.reduce((prev, curr) =>
-    prev.startTime + config.tokensPunishmentFactor*((prev.promptTokens ?? 0) + (prev.outputTokens ?? 0)) < curr.startTime + config.tokensPunishmentFactor*((curr.promptTokens ?? 0) + (curr.outputTokens ?? 0)) ? prev : curr
+    prev.startTime +
+      config.tokensPunishmentFactor *
+        ((prev.promptTokens ?? 0) + (prev.outputTokens ?? 0)) <
+    curr.startTime +
+      config.tokensPunishmentFactor *
+        ((curr.promptTokens ?? 0) + (curr.outputTokens ?? 0))
+      ? prev
+      : curr
   );
   queue.splice(queue.indexOf(req), 1);
 
