@@ -1,12 +1,13 @@
 import { Request } from "express";
 import { Key } from "../../../shared/key-management";
+import { assertNever } from "../../../shared/utils";
 
 /**
  * Represents a change to the request that will be reverted if the request
  * fails.
  */
 interface ProxyReqMutation {
-  target: "header" | "path" | "body" | "api-key";
+  target: "header" | "path" | "body" | "api-key" | "signed-request";
   key?: string;
   originalValue: any | undefined;
 }
@@ -67,6 +68,16 @@ export class ProxyReqManager {
     this.req.url = newPath;
   }
 
+  setSignedRequest(newSignedRequest: typeof this.req.signedRequest): void {
+    const originalValue = this.req.signedRequest;
+    this.mutations.push({ target: "signed-request", key: "signedRequest", originalValue });
+    this.req.signedRequest = newSignedRequest;
+  }
+
+  hasChanged(): boolean {
+    return this.mutations.length > 0;
+  }
+
   revert(): void {
     for (const mutation of this.mutations.reverse()) {
       switch (mutation.target) {
@@ -86,9 +97,16 @@ export class ProxyReqManager {
           this.req.body = mutation.originalValue;
           break;
         case "api-key":
-          this.req.key = mutation.originalValue;
+          // We don't reset the key here because it's not a property of the
+          // inbound request, so we'd only ever be reverting it to null.
           break;
+        case "signed-request":
+          this.req.signedRequest = mutation.originalValue;
+          break;
+        default:
+          assertNever(mutation.target);
       }
     }
+    this.mutations = [];
   }
 }

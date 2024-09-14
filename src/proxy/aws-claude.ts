@@ -80,8 +80,7 @@ const awsClaudeProxy = createQueuedProxyMiddleware({
     if (!signedRequest) throw new Error("Must sign request before proxying");
     return `${signedRequest.protocol}//${signedRequest.hostname}`;
   },
-  beforeProxy: [signAwsRequest],
-  mutators: [finalizeSignedRequest],
+  mutators: [signAwsRequest,finalizeSignedRequest],
   blockingResponseHandler: awsBlockingResponseHandler,
 });
 

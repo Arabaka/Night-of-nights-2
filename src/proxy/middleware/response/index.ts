@@ -71,7 +71,11 @@ export const createOnProxyResHandler = (apiMiddleware: ProxyResMiddleware) => {
     req: Request,
     res: Response
   ) => {
-    const initialHandler: RawResponseBodyHandler = req.isStreaming
+    if (req.changeManager) {
+      req.changeManager.revert();
+    }
+
+    const initialHandler = req.isStreaming
       ? handleStreamedResponse
       : handleBlockingResponse;
     let lastMiddleware = initialHandler.name;
@@ -140,12 +144,6 @@ export const createOnProxyResHandler = (apiMiddleware: ProxyResMiddleware) => {
         res
           .status(500)
           .json({ error: "Internal server error", proxy_note: description });
-      }
-    } finally {
-      if (req.changeManager && !res.headersSent) {
-        // Restore the original request state if the request was retried.
-        req.changeManager.revert();
-        req.log.debug("Reverted request state after retry");
       }
     }
   };

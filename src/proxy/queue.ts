@@ -68,6 +68,14 @@ const sharesIdentifierWith = (incoming: Request) => (queued: Request) =>
   getIdentifier(queued) === getIdentifier(incoming);
 
 async function enqueue(req: Request) {
+  if (req.socket.destroyed || req.res?.writableEnded) {
+    // In rare cases, a request can be disconnected after it is dequeued for a
+    // retry, but before it is re-enqueued. In this case we may miss the abort
+    // and the request will loop in the queue forever.
+    req.log.warn("Attempt to enqueue aborted request.");
+    throw new Error("Attempt to enqueue aborted request.");
+  }
+
   const enqueuedRequestCount = queue.filter(sharesIdentifierWith(req)).length;
 
   if (enqueuedRequestCount >= USER_CONCURRENCY_LIMIT) {
