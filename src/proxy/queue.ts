@@ -25,9 +25,9 @@ import { initializeSseStream } from "../shared/streaming";
 import { logger } from "../logger";
 import { getUniqueIps } from "./rate-limit";
 import { ProxyReqMutator, RequestPreprocessor } from "./middleware/request";
-import { handleProxyError } from "./middleware/common";
 import { sendErrorToClient } from "./middleware/response/error-generator";
 import { ProxyReqManager } from "./middleware/request/proxy-req-manager";
+import { classifyErrorAndSend } from "./middleware/common";
 
 const queue: Request[] = [];
 const log = logger.child({ module: "request-queue" });
@@ -347,7 +347,7 @@ export function createQueueMiddleware({
         }
       } catch (err) {
         // Failure during request preparation is a fatal error.
-        return handleProxyError(err, req, res);
+        return classifyErrorAndSend(err, req, res);
       }
 
       proxyMiddleware(req, res, next);

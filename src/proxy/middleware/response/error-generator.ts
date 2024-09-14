@@ -2,36 +2,33 @@ import express from "express";
 import { APIFormat } from "../../../shared/key-management";
 import { assertNever } from "../../../shared/utils";
 import { initializeSseStream } from "../../../shared/streaming";
+import http from "http";
 
-function getMessageContent({
-  title,
-  message,
-  obj,
-}: {
+/**
+ * Returns a Markdown-formatted message that renders semi-nicely in most chat
+ * frontends. For example:
+ *
+ * **Proxy error (HTTP 404 Not Found)**
+ * The proxy encountered an error while trying to send your prompt to the upstream service. Further technical details are provided below.
+ * ***
+ * *The requested Claude model might not exist, or the key might not be provisioned for it.*
+ * ```
+ * {
+ *  "type": "error",
+ *  "error": {
+ *    "type": "not_found_error",
+ *    "message": "model: some-invalid-model-id",
+ *   },
+ *  "proxy_note": "The requested Claude model might not exist, or the key might not be provisioned for it."
+ * }
+ * ```
+ */
+function getMessageContent(params: {
   title: string;
   message: string;
   obj?: Record<string, any>;
 }) {
-  /*
-  Constructs a Markdown-formatted message that renders semi-nicely in most chat
-  frontends. For example:
-  
-  **Proxy error (HTTP 404 Not Found)**
-  The proxy encountered an error while trying to send your prompt to the upstream service. Further technical details are provided below.
-  ***
-  *The requested Claude model might not exist, or the key might not be provisioned for it.*
-  ```
-  {
-   "type": "error",
-   "error": {
-     "type": "not_found_error",
-     "message": "model: some-invalid-model-id",
-    },
-   "proxy_note": "The requested Claude model might not exist, or the key might not be provisioned for it."
-  }
-  ```
-   */
-
+  const { title, message, obj } = params;
   const note = obj?.proxy_note || obj?.error?.message || "";
   const header = `### **${title}**`;
   const friendlyMessage = note ? `${message}\n\n----\n\n*${note}*` : message;
@@ -71,7 +68,11 @@ type ErrorGeneratorOptions = {
   statusCode?: number;
 };
 
-export function tryInferFormat(body: any): APIFormat | "unknown" {
+/**
+ * Very crude inference of the request format based on the request body. Don't
+ * rely on this to be very accurate.
+ */
+function tryInferFormat(body: any): APIFormat | "unknown" {
   if (typeof body !== "object" || !body.model) {
     return "unknown";
   }
@@ -95,7 +96,11 @@ export function tryInferFormat(body: any): APIFormat | "unknown" {
   return "unknown";
 }
 
-// avoid leaking upstream hostname on dns resolution error
+/**
+ * Redacts the hostname from the error message if it contains a DNS resolution
+ * error. This is to avoid leaking upstream hostnames on DNS resolution errors,
+ * as those may contain sensitive information about the proxy's configuration.
+ */
 function redactHostname(options: ErrorGeneratorOptions): ErrorGeneratorOptions {
   if (!options.message.includes("getaddrinfo")) return options;
 
@@ -112,46 +117,61 @@ function redactHostname(options: ErrorGeneratorOptions): ErrorGeneratorOptions {
   return redacted;
 }
 
-export function sendErrorToClient({
-  options,
-  req,
-  res,
-}: {
+/**
+ * Generates an appropriately-formatted error response and sends it to the
+ * client over their requested transport (blocking or SSE stream).
+ */
+export function sendErrorToClient(params: {
   options: ErrorGeneratorOptions;
   req: express.Request;
   res: express.Response;
 }) {
-  const redactedOpts = redactHostname(options);
-  const { format: inputFormat } = redactedOpts;
+  const { req, res } = params;
+  const options = redactHostname(params.options);
+  const { statusCode, message, title, obj: details } = options;
 
+  // Since we want to send the error in a format the client understands, we
+  // need to know the request format. `setApiFormat` might not have been called
+  // yet, so we'll try to infer it from the request body.
   const format =
-    inputFormat === "unknown" ? tryInferFormat(req.body) : inputFormat;
+    options.format === "unknown" ? tryInferFormat(req.body) : options.format;
   if (format === "unknown") {
-    return res.status(redactedOpts.statusCode || 400).json({
-      error: redactedOpts.message,
-      details: redactedOpts.obj,
+    // Early middleware error (auth, rate limit) so we can only send something
+    // generic.
+    const code = statusCode || 400;
+    const hasDetails = details && Object.keys(details).length > 0;
+    return res.status(code).json({
+      error: {
+        message,
+        type: http.STATUS_CODES[code]!.replace(/\s+/g, "_").toLowerCase(),
+      },
+      ...(hasDetails ? { details } : {}),
     });
   }
 
-  const completion = buildSpoofedCompletion({ ...redactedOpts, format });
-  const event = buildSpoofedSSE({ ...redactedOpts, format });
-  const isStreaming =
-    req.isStreaming || req.body.stream === true || req.body.stream === "true";
-
+  // Cannot modify headers if client opted into streaming and made it into the
+  // proxy request queue, because that immediately starts an SSE stream.
   if (!res.headersSent) {
-    res.setHeader("x-oai-proxy-error", redactedOpts.title);
-    res.setHeader("x-oai-proxy-error-status", redactedOpts.statusCode || 500);
+    res.setHeader("x-oai-proxy-error", title);
+    res.setHeader("x-oai-proxy-error-status", statusCode || 500);
   }
 
+  // By this point, we know the request format. To get the error to display in
+  // chat clients' UIs, we'll send it as a 200 response as a spoofed completion
+  // from the language model. Depending on whether the client is streaming, we
+  // will either send an SSE event or a JSON response.
+  const isStreaming = req.isStreaming || String(req.body.stream) === "true";
   if (isStreaming) {
+    // User can have opted into streaming but not made it into the queue yet,
+    // in which case the stream must be started first.
     if (!res.headersSent) {
       initializeSseStream(res);
     }
-    res.write(event);
+    res.write(buildSpoofedSSE({ ...options, format }));
     res.write(`data: [DONE]\n\n`);
     res.end();
   } else {
-    res.status(200).json(completion);
+    res.status(200).json(buildSpoofedCompletion({ ...options, format }));
   }
 }
 
@@ -193,7 +213,7 @@ export function buildSpoofedCompletion({
       return {
         outputs: [{ text: content, stop_reason: title }],
         model,
-      }
+      };
     case "openai-text":
       return {
         id: "error-" + id,

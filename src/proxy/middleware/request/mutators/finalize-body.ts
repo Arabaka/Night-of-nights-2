@@ -1,5 +1,4 @@
-import { fixRequestBody } from "http-proxy-middleware";
-import type { HPMRequestCallback, ProxyReqMutator } from "../index";
+import type { ProxyReqMutator } from "../index";
 
 /** Finalize the rewritten request body. Must be the last mutator. */
 export const finalizeBody: ProxyReqMutator = (manager) => {
@@ -15,6 +14,7 @@ export const finalizeBody: ProxyReqMutator = (manager) => {
       delete req.body.prompt;
     }
 
+    // TODO: This might not be necessary anymore due to http-proxy monkey patch
     const updatedBody = JSON.stringify(req.body);
     manager.setHeader("Content-Length", String(Buffer.byteLength(updatedBody)));
     manager.setBody(Buffer.from(updatedBody));
