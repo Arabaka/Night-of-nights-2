@@ -19,17 +19,11 @@ import { classifyErrorAndSend } from "../common";
  */
 type ProxyMiddlewareFactoryOptions = {
   /**
-   * Functions to run just before the request is proxied. This API is deprecated
-   * and `mutators` should be used instead.
-   * @deprecated
-   */
-  beforeProxy?: RequestPreprocessor[];
-  /**
    * Functions which receive a ProxyReqManager and can modify the request before
    * it is proxied. The modifications will be automatically reverted if the
    * request needs to be returned to the queue.
    */
-  mutators?: ProxyReqMutator[];
+  mutations?: ProxyReqMutator[];
   /**
    * The target URL to proxy requests to. This can be a string or a function
    * which accepts the request and returns a string.
@@ -51,8 +45,7 @@ type ProxyMiddlewareFactoryOptions = {
  */
 export function createQueuedProxyMiddleware({
   target,
-  mutators,
-  beforeProxy,
+  mutations,
   blockingResponseHandler,
 }: ProxyMiddlewareFactoryOptions) {
   const hpmTarget = typeof target === "string" ? target : "https://setbyrouter";
@@ -101,7 +94,7 @@ export function createQueuedProxyMiddleware({
     }) as any,
   });
 
-  return createQueueMiddleware({ beforeProxy, mutators, proxyMiddleware });
+  return createQueueMiddleware({ mutations, proxyMiddleware });
 }
 
 type ProxiedResponse = http.IncomingMessage & Response & any;

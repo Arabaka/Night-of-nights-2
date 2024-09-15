@@ -100,7 +100,7 @@ function replacePath(manager: ProxyReqManager) {
 
 const openaiImagesProxy = createQueuedProxyMiddleware({
   target: "https://api.openai.com",
-  mutators: [replacePath, addKey, finalizeBody],
+  mutations: [replacePath, addKey, finalizeBody],
   blockingResponseHandler: openaiImagesResponseHandler,
 });
 

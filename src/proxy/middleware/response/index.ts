@@ -71,6 +71,9 @@ export const createOnProxyResHandler = (apiMiddleware: ProxyResMiddleware) => {
     req: Request,
     res: Response
   ) => {
+    // Proxied request has by now been sent to the upstream API, so we revert
+    // tracked mutations that were only needed to send the request.
+    // This generally means path adjustment, headers, and body serialization.
     if (req.changeManager) {
       req.changeManager.revert();
     }

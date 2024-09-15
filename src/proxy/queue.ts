@@ -322,12 +322,10 @@ export function getQueueLength(partition: ModelFamily | "all" = "all") {
 }
 
 export function createQueueMiddleware({
-  beforeProxy = [],
-  mutators = [],
+  mutations = [],
   proxyMiddleware,
 }: {
-  beforeProxy?: RequestPreprocessor[];
-  mutators?: ProxyReqMutator[];
+  mutations?: ProxyReqMutator[];
   proxyMiddleware: Handler;
 }): Handler {
   return async (req, res, next) => {
@@ -338,11 +336,6 @@ export function createQueueMiddleware({
       req.body.stream = req.isStreaming;
 
       try {
-        // TODO: convert these to new ProxyReqMutator API
-        for (const middleware of beforeProxy) {
-          await middleware(req);
-        }
-
         // Just before executing the proxyMiddleware, we will create a
         // ProxyReqManager to track modifications to the request. This allows
         // us to revert those changes if the proxied request fails with a
@@ -350,7 +343,7 @@ export function createQueueMiddleware({
         // handler.
         const changeManager = new ProxyReqManager(req);
         req.changeManager = changeManager;
-        for (const mutator of mutators) {
+        for (const mutator of mutations) {
           await mutator(changeManager);
         }
       } catch (err) {

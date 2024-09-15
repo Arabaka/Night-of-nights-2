@@ -122,7 +122,7 @@ export function transformMistralTextToMistralChat(textBody: any) {
 
 const mistralAIProxy = createQueuedProxyMiddleware({
   target: "https://api.mistral.ai",
-  mutators: [addKey, finalizeBody],
+  mutations: [addKey, finalizeBody],
   blockingResponseHandler: mistralAIResponseHandler,
 });
 

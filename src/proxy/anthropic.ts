@@ -208,7 +208,7 @@ function selectUpstreamPath(manager: ProxyReqManager) {
 
 const anthropicProxy = createQueuedProxyMiddleware({
   target: "https://api.anthropic.com",
-  mutators: [selectUpstreamPath, addKey, finalizeBody],
+  mutations: [selectUpstreamPath, addKey, finalizeBody],
   blockingResponseHandler: anthropicBlockingResponseHandler,
 });
 

@@ -76,8 +76,7 @@ const gcpProxy = createQueuedProxyMiddleware({
     if (!signedRequest) throw new Error("Must sign request before proxying");
     return `${signedRequest.protocol}//${signedRequest.hostname}`;
   },
-  beforeProxy: [signGcpRequest],
-  mutators: [finalizeSignedRequest],
+  mutations: [signGcpRequest, finalizeSignedRequest],
   blockingResponseHandler: gcpBlockingResponseHandler,
 });
 

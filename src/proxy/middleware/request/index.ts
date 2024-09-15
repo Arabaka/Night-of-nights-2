@@ -7,14 +7,11 @@ export {
 } from "./preprocessor-factory";
 
 // Preprocessors (runs before request is queued, usually body transformation/validation)
-export { addAzureKey } from "./preprocessors/add-azure-key";
 export { applyQuotaLimits } from "./preprocessors/apply-quota-limits";
 export { blockZoomerOrigins } from "./preprocessors/block-zoomer-origins";
 export { countPromptTokens } from "./preprocessors/count-prompt-tokens";
 export { languageFilter } from "./preprocessors/language-filter";
 export { setApiFormat } from "./preprocessors/set-api-format";
-export { signAwsRequest } from "./preprocessors/sign-aws-request";
-export { signGcpRequest } from "./preprocessors/sign-vertex-ai-request";
 export { transformOutboundPayload } from "./preprocessors/transform-outbound-payload";
 export { validateContextSize } from "./preprocessors/validate-context-size";
 export { validateModelFamily } from "./preprocessors/validate-model-family";
@@ -22,8 +19,11 @@ export { validateVision } from "./preprocessors/validate-vision";
 
 // Proxy request mutators (runs every time request is dequeued, before proxying, usually for auth/signing)
 export { addKey, addKeyForEmbeddingsRequest } from "./mutators/add-key";
+export { addAzureKey } from "./mutators/add-azure-key";
 export { finalizeBody } from "./mutators/finalize-body";
 export { finalizeSignedRequest } from "./mutators/finalize-signed-request";
+export { signAwsRequest } from "./mutators/sign-aws-request";
+export { signGcpRequest } from "./mutators/sign-vertex-ai-request";
 export { stripHeaders } from "./mutators/strip-headers";
 
 /**

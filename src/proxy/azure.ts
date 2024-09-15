@@ -46,8 +46,7 @@ const azureOpenAIProxy = createQueuedProxyMiddleware({
     const { hostname, path } = signedRequest;
     return `https://${hostname}${path}`;
   },
-  beforeProxy: [addAzureKey],
-  mutators: [finalizeSignedRequest],
+  mutations: [addAzureKey, finalizeSignedRequest],
   blockingResponseHandler: azureOpenaiResponseHandler,
 });
 

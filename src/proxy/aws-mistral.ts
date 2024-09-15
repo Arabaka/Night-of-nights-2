@@ -39,8 +39,7 @@ const awsMistralProxy = createQueuedProxyMiddleware({
     if (!signedRequest) throw new Error("Must sign request before proxying");
     return `${signedRequest.protocol}//${signedRequest.hostname}`;
   },
-  beforeProxy: [signAwsRequest],
-  mutators: [finalizeSignedRequest],
+  mutations: [signAwsRequest,finalizeSignedRequest],
   blockingResponseHandler: awsMistralBlockingResponseHandler,
 });
 

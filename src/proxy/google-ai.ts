@@ -8,7 +8,7 @@ import {
   finalizeSignedRequest,
 } from "./middleware/request";
 import { ProxyResHandlerWithBody } from "./middleware/response";
-import { addGoogleAIKey } from "./middleware/request/preprocessors/add-google-ai-key";
+import { addGoogleAIKey } from "./middleware/request/mutators/add-google-ai-key";
 import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 
 let modelsCache: any = null;
@@ -108,8 +108,7 @@ const googleAIProxy = createQueuedProxyMiddleware({
     const { protocol, hostname, path } = signedRequest;
     return `${protocol}//${hostname}${path}`;
   },
-  beforeProxy: [addGoogleAIKey],
-  mutators: [finalizeSignedRequest],
+  mutations: [addGoogleAIKey, finalizeSignedRequest],
   blockingResponseHandler: googleAIBlockingResponseHandler,
 });
 

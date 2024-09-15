@@ -1,7 +1,8 @@
 import { keyPool } from "../../../../shared/key-management";
-import { RequestPreprocessor } from "../index";
+import { ProxyReqMutator} from "../index";
 
-export const addGoogleAIKey: RequestPreprocessor = (req) => {
+export const addGoogleAIKey: ProxyReqMutator = (manager) => {
+  const req = manager.request;
   const inboundValid =
     req.inboundApi === "openai" || req.inboundApi === "google-ai";
   const outboundValid = req.outboundApi === "google-ai";
@@ -12,10 +13,11 @@ export const addGoogleAIKey: RequestPreprocessor = (req) => {
   }
   
   const model = req.body.model;
-  req.isStreaming = req.isStreaming || req.body.stream;
-  req.key = keyPool.get(model, "google-ai");
+  const key = keyPool.get(model, "google-ai");
+  manager.setKey(key);
+
   req.log.info(
-    { key: req.key.hash, model, stream: req.isStreaming },
+    { key: key.hash, model, stream: req.isStreaming },
     "Assigned Google AI API key to request"
   );
   
@@ -23,17 +25,20 @@ export const addGoogleAIKey: RequestPreprocessor = (req) => {
   // https://generativelanguage.googleapis.com/v1beta/models/$MODEL_ID:streamGenerateContent?key=${API_KEY}
   const payload = { ...req.body, stream: undefined, model: undefined };
 
-  req.signedRequest = {
+  // TODO: this isn't actually signed, so the manager api is a little unclear
+  // with the ProxyReqManager refactor, it's probably no longer necesasry to
+  // do this because we can modify the path using Manager.setPath.
+  manager.setSignedRequest({
     method: "POST",
     protocol: "https:",
     hostname: "generativelanguage.googleapis.com",
     path: `/v1beta/models/${model}:${
       req.isStreaming ? "streamGenerateContent" : "generateContent"
-    }?key=${req.key.key}`,
+    }?key=${key.key}`,
     headers: {
       ["host"]: `generativelanguage.googleapis.com`,
       ["content-type"]: "application/json",
     },
     body: JSON.stringify(payload),
-  };
+  });
 };

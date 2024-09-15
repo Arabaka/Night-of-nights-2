@@ -136,13 +136,13 @@ function transformTurboInstructResponse(
 }
 
 const openaiProxy = createQueuedProxyMiddleware({
-  mutators: [addKey, finalizeBody],
+  mutations: [addKey, finalizeBody],
   target: "https://api.openai.com",
   blockingResponseHandler: openaiResponseHandler,
 });
 
 const openaiEmbeddingsProxy = createQueuedProxyMiddleware({
-  mutators: [addKeyForEmbeddingsRequest, finalizeBody],
+  mutations: [addKeyForEmbeddingsRequest, finalizeBody],
   target: "https://api.openai.com",
 });
 
